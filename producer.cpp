@@ -82,8 +82,6 @@ int main(int argc, char **argv)
   std::mt19937 gen(rd());                              
   std::normal_distribution<double> dist(mean, std_dev);
 
-  size_t size = sizeof(SharedBuffer);
-
   int shm_fd = shm_open(SHM, O_CREAT | O_RDWR, 0666);
 
   if (shm_fd == -1) 
@@ -92,13 +90,13 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  if (ftruncate(shm_fd, size) == -1) 
+  if (ftruncate(shm_fd, sizeof(SharedBuffer)) == -1) 
   {  
     perror("ftruncate failed");
     exit(1);
   }
 
-  SharedBuffer *shm = (SharedBuffer *) mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+  SharedBuffer *shm = (SharedBuffer *) mmap(NULL, sizeof(SharedBuffer), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
   
   if (shm == MAP_FAILED) 
   { 
@@ -107,8 +105,6 @@ int main(int argc, char **argv)
   }
 
   close(shm_fd);
-
-  printf("Shared memory ready, in=%d out=%d\n", shm->in, shm->out);
 
   sem_t *full = sem_open(FULL, O_CREAT, 0666, 0);
   sem_t *empty = sem_open(EMPTY, O_CREAT, 0666, N);
@@ -146,10 +142,4 @@ int main(int argc, char **argv)
     log_message(name, buffer);
     usleep(T * 1000); // sleep for T milliseconds
   }
-
-  sem_close(full);
-  sem_close(empty);
-  sem_close(mutex);
-  munmap(shm, size);
-  return 0;
 }

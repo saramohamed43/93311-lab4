@@ -13,6 +13,9 @@
 #define EMPTY "/sem_empty"
 #define MUTEX "/sem_mutex"
 
+#define COMMODITIES_NUMBER 11
+#define WINDOW 5
+
 typedef struct {
     char name[11];
     double price;
@@ -23,6 +26,73 @@ typedef struct {
     int out;
     Entry buffer[MAX_ENTRIES];
 } SharedBuffer;
+
+typedef struct {
+    const char *name;
+    double price;
+    double readings[WINDOW];
+    int count;
+    int next;
+    double avg;
+    double prev_avg;
+} Commodity;
+
+Commodity table[COMMODITIES_NUMBER] = {
+    {"ALUMINIUM"}, {"COPPER"}, {"COTTON"}, {"CRUDEOIL"}, {"GOLD"}, {"LEAD"},
+    {"MENTHAOIL"}, {"NATURALGAS"}, {"NICKEL"}, {"SILVER"}, {"ZINC"}
+};
+
+int find_commodity(const char *name) //find commodity by name, -1 if unknown
+{
+    for (int i = 0; i < COMMODITIES_NUMBER; i++)
+    {
+        if (strcmp(table[i].name, name) == 0)
+            return i;
+    }
+    return -1;
+}
+
+void update_commodity(int i, double price)
+{
+    Commodity *c = &table[i];
+
+    c->prev_avg = c->avg;
+    c->price = price;
+
+    c->readings[c->next] = price;
+    c->next = (c->next + 1) % WINDOW;
+    if (c->count < WINDOW)
+        c->count++;
+
+    double sum = 0;
+    for (int k = 0; k < c->count; k++)
+        sum += c->readings[k];
+    c->avg = sum / c->count;
+}
+
+void dashboard()
+{
+    printf("\033[1;1H\033[2J");   // move cursor to top-left, clear the screen
+
+    printf("%-12s %9s %9s\n", "Currency", "Price", "AvgPrice");
+    printf("---------------------------------\n");
+
+    for (int i = 0; i < COMMODITIES_NUMBER; i++)
+    {
+        Commodity *c = &table[i];
+
+        printf("%-12s ", c->name);
+
+        if (c->price > 0 && c->avg > c->prev_avg)
+            printf("\033[32m%7s, %7.2lf \u2191\033[0m\n", c->price, c->avg);   // green up
+        else if (c->price > 0 && c->avg < c->prev_avg)
+            printf("\033[31m%7s, %7.2lf \u2193\033[0m\n", c->price, c->avg);   // red down
+        else
+            printf("%7s, %7.2lf\n", c->price, c->avg);                        // no change yet
+    }
+
+    fflush(stdout);
+}
 
 int main(int argc, char **argv)
 {
@@ -73,11 +143,23 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  printf("Consumer ready, N=%d\n", N);
+dashboard();
 
-  sem_close(full);
-  sem_close(empty);
-  sem_close(mutex);
-  munmap(shm, size);
-  return 0;
+  while (1)
+  {
+    sem_wait(full);
+    sem_wait(mutex);
+
+    Entry e = shm->buffer[shm->out];
+    shm->out = (shm->out + 1) % N;
+
+    sem_post(mutex);
+    sem_post(empty);
+
+    int i = find_commodity(e.name);
+    if (i != -1){
+        update_commodity(i, e.price);
+        dashboard();
+    }
+  }
 }
