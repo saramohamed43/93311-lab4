@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <semaphore.h>
+#include <signal.h>
 
 #define SHM "/shared_memory"
 #define MAX_ENTRIES 1000
@@ -47,7 +49,7 @@ int find_commodity(const char *name) //find commodity by name, -1 if unknown
 {
     for (int i = 0; i < COMMODITIES_NUMBER; i++)
     {
-        if (strcmp(table[i].name, name) == 0)
+        if (strcasecmp(table[i].name, name) == 0)
             return i;
     }
     return -1;
@@ -89,6 +91,13 @@ void print_cell(double value, double prev)
     }
 
     printf("%s%7.2lf%s\033[0m", color, value, arrow);
+}
+
+volatile sig_atomic_t stop = 0;
+
+void handle_signal(int sig)
+{
+    stop = 1;
 }
 
 void dashboard()
@@ -163,12 +172,23 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+struct sigaction sa;
+memset(&sa, 0, sizeof(sa));
+sa.sa_handler = handle_signal;   // no SA_RESTART, so sem_wait returns when a signal arrives
+sigaction(SIGINT, &sa, NULL);    // Ctrl+C
+sigaction(SIGTERM, &sa, NULL);   // pkill
+
 dashboard();
 
-  while (1)
+  while (!stop)
   {
-    sem_wait(full);
-    sem_wait(mutex);
+    if (sem_wait(full) == -1)
+      break;
+    if (sem_wait(mutex) == -1)
+    {
+      sem_post(full);
+      break;
+    }
 
     Entry e = shm->buffer[shm->out];
     shm->out = (shm->out + 1) % N;
@@ -182,4 +202,15 @@ dashboard();
         dashboard();
     }
   }
+
+  sem_close(full);
+  sem_close(empty);
+  sem_close(mutex);
+  munmap(shm, size);
+
+  sem_unlink(FULL);
+  sem_unlink(EMPTY);
+  sem_unlink(MUTEX);
+  shm_unlink(SHM);
+  return 0;
 }

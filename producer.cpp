@@ -7,6 +7,7 @@
 #include <semaphore.h>
 #include <random>
 #include <time.h>
+#include <signal.h>
 
 
 #define SHM "/shared_memory"
@@ -26,6 +27,13 @@ typedef struct {
     int out;
     Entry buffer[MAX_ENTRIES];
 } SharedBuffer;
+
+volatile sig_atomic_t stop = 0;
+
+void handle_signal(int sig)
+{
+    stop = 1;
+}
 
 void log_message(const char *name,const char *msg)
 {
@@ -116,16 +124,28 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = handle_signal;   // no SA_RESTART, so sem_wait returns when a signal arrives
+  sigaction(SIGINT, &sa, NULL);    // Ctrl+C
+  sigaction(SIGTERM, &sa, NULL);   // pkill
+
   char buffer[100];
-  while (1)
+  
+  while (!stop)
   {
     double price = dist(gen); 
     snprintf(buffer, sizeof(buffer), "generating a new value %.2f", price);
     log_message(name, buffer);
 
     log_message(name, "trying to get mutex on shared buffer");
-    sem_wait(empty);
-    sem_wait(mutex);
+    if (sem_wait(empty) == -1)
+      break;
+    if (sem_wait(mutex) == -1)
+    {
+      sem_post(empty);   // give back the slot we already took
+      break;
+    }
 
     strncpy(shm->buffer[shm->in].name, name, 10);
     shm->buffer[shm->in].name[10] = '\0';
@@ -142,4 +162,10 @@ int main(int argc, char **argv)
     log_message(name, buffer);
     usleep(T * 1000); // sleep for T milliseconds
   }
+
+  sem_close(full);
+  sem_close(empty);
+  sem_close(mutex);
+  munmap(shm, sizeof(SharedBuffer));
+  return 0;
 }
