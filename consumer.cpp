@@ -34,6 +34,7 @@ typedef struct {
     int count;
     int next;
     double avg;
+    double prev_price;
     double prev_avg;
 } Commodity;
 
@@ -57,6 +58,7 @@ void update_commodity(int i, double price)
     Commodity *c = &table[i];
 
     c->prev_avg = c->avg;
+    c->prev_price = c->price;
     c->price = price;
 
     c->readings[c->next] = price;
@@ -70,27 +72,45 @@ void update_commodity(int i, double price)
     c->avg = sum / c->count;
 }
 
+void print_cell(double value, double prev)
+{
+    const char *color = "\033[36m";   // cyan: no data yet or unchanged
+    const char *arrow = " ";
+
+    if (value > 0 && value > prev)
+    {
+        color = "\033[32m";           // green up
+        arrow = "\u2191";
+    }
+    else if (value > 0 && value < prev)
+    {
+        color = "\033[31m";           // red down
+        arrow = "\u2193";
+    }
+
+    printf("%s%7.2lf%s\033[0m", color, value, arrow);
+}
+
 void dashboard()
 {
     printf("\033[1;1H\033[2J");   // move cursor to top-left, clear the screen
 
-    printf("%-12s %7s %7s\n", "Currency", "Price", "AvgPrice");
-    printf("---------------------------------\n");
+    printf("+--------------+----------+----------+\n");
+    printf("| %-12s | %-8s | %-8s |\n", "Currency", "Price", "AvgPrice");
+    printf("+--------------+----------+----------+\n");
 
     for (int i = 0; i < COMMODITIES_NUMBER; i++)
     {
         Commodity *c = &table[i];
 
-        printf("%-12s ", c->name);
-
-        if (c->price > 0 && c->avg > c->prev_avg)
-            printf("\033[32m%7.2lf %7.2lf \u2191\033[0m\n", c->price, c->avg);   // green up
-        else if (c->price > 0 && c->avg < c->prev_avg)
-            printf("\033[31m%7.2lf %7.2lf \u2193\033[0m\n", c->price, c->avg); // red down
-        else
-            printf("%7.2lf %7.2lf\n", c->price, c->avg);                        // no change yet
+        printf("| %-12s | ", c->name);
+        print_cell(c->price, c->prev_price);
+        printf(" | ");
+        print_cell(c->avg, c->prev_avg);
+        printf(" |\n");
     }
 
+    printf("+--------------+----------+----------+\n");
     fflush(stdout);
 }
 
