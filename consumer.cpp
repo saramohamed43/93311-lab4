@@ -74,7 +74,7 @@ void dashboard()
 {
     printf("\033[1;1H\033[2J");   // move cursor to top-left, clear the screen
 
-    printf("%-12s %9s %9s\n", "Currency", "Price", "AvgPrice");
+    printf("%-12s %7s %7s\n", "Currency", "Price", "AvgPrice");
     printf("---------------------------------\n");
 
     for (int i = 0; i < COMMODITIES_NUMBER; i++)
@@ -84,11 +84,11 @@ void dashboard()
         printf("%-12s ", c->name);
 
         if (c->price > 0 && c->avg > c->prev_avg)
-            printf("\033[32m%7s, %7.2lf \u2191\033[0m\n", c->price, c->avg);   // green up
+            printf("\033[32m%7.2lf %7.2lf \u2191\033[0m\n", c->price, c->avg);   // green up
         else if (c->price > 0 && c->avg < c->prev_avg)
-            printf("\033[31m%7s, %7.2lf \u2193\033[0m\n", c->price, c->avg);   // red down
+            printf("\033[31m%7.2lf %7.2lf \u2193\033[0m\n", c->price, c->avg); // red down
         else
-            printf("%7s, %7.2lf\n", c->price, c->avg);                        // no change yet
+            printf("%7.2lf %7.2lf\n", c->price, c->avg);                        // no change yet
     }
 
     fflush(stdout);
